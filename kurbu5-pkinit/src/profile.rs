@@ -3,10 +3,8 @@ use pkinit_core::config::{PkinitClientConfig, PkinitKdcConfig};
 use pkinit_core::constants::{DhGroup, KemAlgorithm};
 
 pub fn read_client_config(profile: &Profile, realm: Option<&str>, config: &mut PkinitClientConfig) {
-    if config.identity.is_none()
-        && let Ok(v) = profile.get_string("libdefaults", "pkinit_identities", None, None)
-    {
-        config.identity = Some(v);
+    if config.identity.is_none() {
+        config.identity = get_non_empty_string(profile, "libdefaults", "pkinit_identities", None);
     }
 
     if config.anchors.is_empty()
@@ -43,7 +41,7 @@ pub fn read_client_config(profile: &Profile, realm: Option<&str>, config: &mut P
     if let Ok(v) = profile.get_boolean("libdefaults", "pkinit_kdc_trust_tofu", None, false) {
         config.kdc_trust_tofu = v;
     }
-    if let Ok(v) = profile.get_string("libdefaults", "pkinit_kdc_trust_broker", None, None) {
+    if let Some(v) = get_non_empty_string(profile, "libdefaults", "pkinit_kdc_trust_broker", None) {
         config.kdc_trust_broker = Some(v);
     }
     if let Ok(v) = profile.get_integer("libdefaults", "pkinit_kdc_trust_timeout", None, 30) {
@@ -51,10 +49,9 @@ pub fn read_client_config(profile: &Profile, realm: Option<&str>, config: &mut P
     }
 
     if let Some(realm) = realm {
-        if config.identity.is_none()
-            && let Ok(v) = profile.get_string("realms", realm, Some("pkinit_identities"), None)
-        {
-            config.identity = Some(v);
+        if config.identity.is_none() {
+            config.identity =
+                get_non_empty_string(profile, "realms", realm, Some("pkinit_identities"));
         }
         if config.anchors.is_empty()
             && let Ok(anchors) = profile.get_values(&["realms", realm, "pkinit_anchors"])
@@ -88,7 +85,9 @@ pub fn read_client_config(profile: &Profile, realm: Option<&str>, config: &mut P
         if let Ok(v) = profile.get_boolean("realms", realm, Some("pkinit_kdc_trust_tofu"), false) {
             config.kdc_trust_tofu = v;
         }
-        if let Ok(v) = profile.get_string("realms", realm, Some("pkinit_kdc_trust_broker"), None) {
+        if let Some(v) =
+            get_non_empty_string(profile, "realms", realm, Some("pkinit_kdc_trust_broker"))
+        {
             config.kdc_trust_broker = Some(v);
         }
         if let Ok(v) = profile.get_integer("realms", realm, Some("pkinit_kdc_trust_timeout"), 30) {
@@ -102,7 +101,7 @@ pub fn read_client_config(profile: &Profile, realm: Option<&str>, config: &mut P
 pub fn read_kdc_config(profile: &Profile, realm: &str) -> PkinitKdcConfig {
     let mut config = PkinitKdcConfig::default();
 
-    if let Ok(v) = profile.get_string("kdcdefaults", "pkinit_identity", None, None) {
+    if let Some(v) = get_non_empty_string(profile, "kdcdefaults", "pkinit_identity", None) {
         config.identity = Some(v);
     }
     if let Ok(anchors) = profile.get_values(&["kdcdefaults", "pkinit_anchors"]) {
@@ -149,7 +148,7 @@ pub fn read_kdc_config(profile: &Profile, realm: &str) -> PkinitKdcConfig {
             .collect();
     }
 
-    if let Ok(v) = profile.get_string("realms", realm, Some("pkinit_identity"), None) {
+    if let Some(v) = get_non_empty_string(profile, "realms", realm, Some("pkinit_identity")) {
         config.identity = Some(v);
     }
     if let Ok(anchors) = profile.get_values(&["realms", realm, "pkinit_anchors"]) {
@@ -194,6 +193,16 @@ pub fn read_kdc_config(profile: &Profile, realm: &str) -> PkinitKdcConfig {
     }
 
     config
+}
+
+fn get_non_empty_string(
+    profile: &Profile,
+    name: &str,
+    subname: &str,
+    subsubname: Option<&str>,
+) -> Option<String> {
+    let v = profile.get_string(name, subname, subsubname, None).ok()?;
+    (!v.is_empty()).then_some(v)
 }
 
 fn apply_eku_checking(value: &str, require_eku: &mut bool, accept_secondary: &mut bool) {
